@@ -1,13 +1,33 @@
 # client.py
 # Gereksinimler: pip install requests python-dotenv
-import requests, threading, time, webbrowser, os
+import requests, threading, time, webbrowser, os, sys
 from datetime import datetime
 from dotenv import load_dotenv
+import tkinter as tk
+from tkinter import simpledialog, messagebox
+import ctypes
+
+# --- Konsolu gizle (Windows) ---
+if os.name == 'nt':
+    ctypes.windll.user32.ShowWindow(ctypes.windll.kernel32.GetConsoleWindow(), 0)
 
 load_dotenv()
 TOKEN = os.getenv("TOKEN")
 SERVER_URL = os.getenv("SERVER_URL")  # Örn: https://myserver.com:5000
-CLIENT_NAME = os.getenv("CLIENT_NAME", "MyClient")
+CLIENT_NAME = os.getenv("CLIENT_NAME", "")
+
+# --- Tkinter ile client name input ---
+root = tk.Tk()
+root.withdraw()  # Ana pencereyi gizle
+
+while not CLIENT_NAME:
+    CLIENT_NAME = simpledialog.askstring("Client Name", "Enter client name:", parent=root)
+    if CLIENT_NAME is None:  # kullanıcı kapatmaya çalıştıysa
+        messagebox.showinfo("Info", "You must enter a client name to continue.")
+        continue
+
+# --- Gösterim popup ---
+messagebox.showinfo("Running", f"{CLIENT_NAME} is running")
 
 task_queue = []
 
@@ -31,7 +51,7 @@ def fetch_tasks():
                             "run_at_iso": t["run_at_iso"]
                         })
         except Exception as e:
-            print("fetch error", e)
+            pass
         time.sleep(3)
 
 def task_worker():
@@ -49,6 +69,7 @@ def task_worker():
 threading.Thread(target=fetch_tasks, daemon=True).start()
 threading.Thread(target=task_worker, daemon=True).start()
 register()
-print(f"{CLIENT_NAME} client running. Ctrl+C to exit.")
+
+# --- Sonsuz döngü ---
 while True:
     time.sleep(10)
