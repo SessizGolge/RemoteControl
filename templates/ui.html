@@ -1,0 +1,278 @@
+<!doctype html>
+<html lang="tr">
+<meta charset="utf-8">
+<title>LAN Remote</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<style>
+body{font-family:Arial,sans-serif;background:#111;color:#eee;padding:10px;margin:0;}
+h2{margin-bottom:12px;}
+
+.card{
+  background:#1a1a1a;
+  padding:16px;
+  border-radius:10px;
+  margin-bottom:12px;
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+  box-shadow:0 4px 12px rgba(0,0,0,0.5);
+}
+
+.flex-row.full-width{display:flex;width:100%;}
+.flex-row.full-width input{
+  flex:1;
+  padding:10px;
+  border-radius:6px;
+  border:1px solid #333;
+  background:#222;
+  color:#eee;
+  font-size:14px;
+}
+
+.timer-row{display:flex;gap:6px;width:100%;}
+.timer-row input{
+  flex:1;
+  text-align:center;
+  padding:10px;
+  border-radius:6px;
+  border:1px solid #333;
+  background:#222;
+  color:#eee;
+  font-size:14px;
+}
+
+#runSelectedBtn{
+  width:100%;
+  padding:12px;
+  border-radius:6px;
+  background:#333;
+  color:#eee;
+  border:none;
+  font-size:16px;
+  cursor:pointer;
+  transition:all 0.16s;
+}
+#runSelectedBtn:hover{background:#444;transform:scale(1.02);}
+
+#devices{margin-top:12px;display:flex;flex-direction:column;gap:10px;}
+
+.device{
+  background:#171717;
+  padding:12px;
+  border-radius:8px;
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+  box-shadow:0 2px 8px rgba(0,0,0,0.4);
+  opacity:0;
+  transform:translateY(-8px);
+  transition:all 0.28s;
+}
+.device.show{opacity:1;transform:translateY(0);}
+.device .top{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+.device .name{font-weight:600;}
+.tasks{display:flex;flex-direction:column;gap:6px;margin-top:6px;}
+.task{
+  background:#222;
+  padding:8px;
+  border-radius:6px;
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  opacity:0;
+  transform:translateY(-6px);
+  transition:all 0.28s;
+}
+.task.show{opacity:1;transform:translateY(0);}
+.task .info{font-size:13px;color:#ddd;}
+.task button{background:#b22222;color:#fff;border:none;border-radius:6px;padding:6px 8px;cursor:pointer;}
+
+.select-all-btn{
+  background:#444;
+  color:#eee;
+  padding:8px 12px;
+  border-radius:6px;
+  width:fit-content;
+  cursor:pointer;
+  margin-bottom:8px;
+  transition:all 0.16s;
+}
+.select-all-btn:hover{background:#555;transform:scale(1.02);}
+
+/* responsive tweaks */
+@media(max-width:480px){
+  .timer-row{flex-direction:row;gap:4px;}
+  .timer-row input{flex:1; min-width:0;}
+  .device .top{flex-direction:column;align-items:flex-start;}
+}
+</style>
+
+<h2>Remote Control</h2>
+<div class="card">
+  <div class="flex-row full-width">
+    <input id="url" type="text" placeholder="For example: https://youtube.com/..."/>
+  </div>
+  <div class="flex-row timer-row">
+    <input id="hours" type="number" min="0" max="99" placeholder="HH"/>
+    <input id="minutes" type="number" min="0" max="59" placeholder="MM"/>
+    <input id="seconds" type="number" min="0" max="59" placeholder="SS"/>
+  </div>
+  <div class="controls">
+    <button id="runSelectedBtn" onclick="openSelected()">Run Selected</button>
+  </div>
+</div>
+
+<div id="devices">
+  <div class="select-all-btn" onclick="toggleSelectAll()">Select All</div>
+</div>
+
+<script>
+let state = { devices: {}, selected: new Set() };
+
+async function fetchDevices(){
+    try{
+        const r = await fetch('/devices');
+        if(!r.ok) throw new Error('devices err');
+        const devs = await r.json() || [];
+        const newIPs = devs.map(d => d.ip);
+
+        // eski client'ları sil
+        Object.keys(state.devices).forEach(ip => {
+            if(!newIPs.includes(ip)){
+                const el = document.querySelector(`.device input[data-ip="${ip}"]`)?.closest('.device');
+                if(el) el.remove();
+                delete state.devices[ip];
+                state.selected.delete(ip);
+            }
+        });
+
+        // yeni cihazları ekle veya güncelle
+        devs.forEach(d => {
+            if(!state.devices[d.ip]){
+                renderDevice(d);
+            } else {
+                state.devices[d.ip].tasks = d.tasks;
+                updateDeviceUI(d.ip, d);
+            }
+            state.devices[d.ip] = d;
+        });
+
+    }catch(e){ console.error("fetchDevices error", e); }
+}
+
+function updateDeviceUI(ip, d){
+    renderTasksForDevice(ip, d.tasks || []);
+    // checkbox durumunu güncelle
+    const checkbox = document.querySelector(`.device input[data-ip="${ip}"]`);
+    if(checkbox){
+        checkbox.checked = state.selected.has(ip);
+    }
+}
+
+function renderDevice(d){
+    const container = document.getElementById('devices');
+    const div = document.createElement('div');
+    div.className = 'device';
+    // checkbox durumunu state.selected ile kontrol et
+    const checked = state.selected.has(d.ip) ? 'checked' : '';
+    div.innerHTML = `
+      <div class="top">
+        <input type="checkbox" data-ip="${d.ip}" ${checked}/>
+        <div class="name">${escapeHtml(d.name || d.ip)}</div>
+      </div>
+      <div class="tasks" id="tasks_${d.ip}"></div>
+    `;
+    div.querySelector('input[type=checkbox]').addEventListener('change', e=>{
+        if(e.target.checked) state.selected.add(d.ip);
+        else state.selected.delete(d.ip);
+    });
+    container.appendChild(div);
+    setTimeout(()=>div.classList.add('show'), 40);
+    renderTasksForDevice(d.ip, d.tasks || []);
+}
+
+function renderTasksForDevice(ip, tasks){
+    const tcont = document.getElementById('tasks_' + ip);
+    if(!tcont) return;
+    tcont.innerHTML = ''; // önce temizle
+    tasks.forEach((t, idx) => {
+        const taskDiv = document.createElement('div');
+        taskDiv.className = 'task';
+        taskDiv.innerHTML = `
+            <div class="info"><strong>${escapeHtml(t.url)}</strong><div id="time_${ip}_${idx}"></div></div>
+            <div><button class="delete-btn">Delete</button></div>
+        `;
+        taskDiv.querySelector('.delete-btn').addEventListener('click', ()=> deleteTask(ip, idx));
+        tcont.appendChild(taskDiv);
+        setTimeout(()=>taskDiv.classList.add('show'), 30);
+        updateSingleCountdown(ip, idx, t.run_at);
+    });
+}
+
+function parseIso(s){ return new Date(s); }
+function updateSingleCountdown(ip, idx, run_at_iso){
+    const el = document.getElementById(`time_${ip}_${idx}`);
+    if(!el) return;
+    const runAt = parseIso(run_at_iso);
+    const diff = Math.max(0, Math.floor((runAt - new Date())/1000));
+    const h = Math.floor(diff/3600), m = Math.floor((diff%3600)/60), s = diff%60;
+    el.innerText = `in ${h}h ${m}m ${s}s`;
+}
+
+setInterval(()=> {
+    Object.keys(state.devices).forEach(ip => {
+        const d = state.devices[ip];
+        (d.tasks || []).forEach((t, idx) => updateSingleCountdown(ip, idx, t.run_at));
+    });
+}, 1000);
+
+function getDelaySec(){
+    const h = parseInt(document.getElementById('hours').value) || 0;
+    const m = parseInt(document.getElementById('minutes').value) || 0;
+    const s = parseInt(document.getElementById('seconds').value) || 0;
+    return h*3600 + m*60 + s;
+}
+
+async function openSelected(){
+    const url = document.getElementById('url').value.trim();
+    if(!url) { alert('URL boş olamaz'); return; }
+    const ips = Array.from(state.selected);
+    if(ips.length === 0) { alert('Seçili cihaz yok'); return; }
+    const delay = getDelaySec();
+    try{
+        const r = await fetch('/open', {
+            method:'POST',
+            headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({ ips, url, delay_sec: delay })
+        });
+        await r.json();
+        setTimeout(fetchDevices, 800);
+    }catch(e){ console.error(e); }
+}
+
+async function deleteTask(ip, index){
+    try{
+        const r = await fetch('/delete_task', {
+            method:'POST',
+            headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({ ip, index })
+        });
+        const j = await r.json();
+        if(j.ok) fetchDevices();
+    }catch(e){ console.error(e); }
+}
+
+function toggleSelectAll(){
+    const all = Object.keys(state.devices);
+    const allSelected = all.every(ip => state.selected.has(ip));
+    if(allSelected) state.selected.clear();
+    else all.forEach(ip => state.selected.add(ip));
+    fetchDevices();
+}
+
+function escapeHtml(s){ return (s||'').toString().replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]); }
+
+fetchDevices();
+setInterval(fetchDevices, 3000);
+</script>
