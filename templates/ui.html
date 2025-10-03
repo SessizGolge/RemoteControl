@@ -5,107 +5,29 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 
 <style>
+/* --- mevcut CSS aynen --- */
 body{font-family:Arial,sans-serif;background:#111;color:#eee;padding:10px;margin:0;}
 h2{margin-bottom:12px;}
-
-.card{
-  background:#1a1a1a;
-  padding:16px;
-  border-radius:10px;
-  margin-bottom:12px;
-  display:flex;
-  flex-direction:column;
-  gap:10px;
-  box-shadow:0 4px 12px rgba(0,0,0,0.5);
-}
-
+.card{background:#1a1a1a;padding:16px;border-radius:10px;margin-bottom:12px;display:flex;flex-direction:column;gap:10px;box-shadow:0 4px 12px rgba(0,0,0,0.5);}
 .flex-row.full-width{display:flex;width:100%;}
-.flex-row.full-width input{
-  flex:1;
-  padding:10px;
-  border-radius:6px;
-  border:1px solid #333;
-  background:#222;
-  color:#eee;
-  font-size:14px;
-}
-
+.flex-row.full-width input{flex:1;padding:10px;border-radius:6px;border:1px solid #333;background:#222;color:#eee;font-size:14px;}
 .timer-row{display:flex;gap:6px;width:100%;}
-.timer-row input{
-  flex:1;
-  text-align:center;
-  padding:10px;
-  border-radius:6px;
-  border:1px solid #333;
-  background:#222;
-  color:#eee;
-  font-size:14px;
-}
-
-#runSelectedBtn{
-  width:100%;
-  padding:12px;
-  border-radius:6px;
-  background:#333;
-  color:#eee;
-  border:none;
-  font-size:16px;
-  cursor:pointer;
-  transition:all 0.16s;
-}
+.timer-row input{flex:1;text-align:center;padding:10px;border-radius:6px;border:1px solid #333;background:#222;color:#eee;font-size:14px;}
+#runSelectedBtn{width:100%;padding:12px;border-radius:6px;background:#333;color:#eee;border:none;font-size:16px;cursor:pointer;transition:all 0.16s;}
 #runSelectedBtn:hover{background:#444;transform:scale(1.02);}
-
 #devices{margin-top:12px;display:flex;flex-direction:column;gap:10px;}
-
-.device{
-  background:#171717;
-  padding:12px;
-  border-radius:8px;
-  display:flex;
-  flex-direction:column;
-  gap:8px;
-  box-shadow:0 2px 8px rgba(0,0,0,0.4);
-  opacity:0;
-  transform:translateY(-8px);
-  transition:all 0.28s;
-}
+.device{background:#171717;padding:12px;border-radius:8px;display:flex;flex-direction:column;gap:8px;box-shadow:0 2px 8px rgba(0,0,0,0.4);opacity:0;transform:translateY(-8px);transition:all 0.28s;}
 .device.show{opacity:1;transform:translateY(0);}
 .device .top{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
 .device .name{font-weight:600;}
 .tasks{display:flex;flex-direction:column;gap:6px;margin-top:6px;}
-.task{
-  background:#222;
-  padding:8px;
-  border-radius:6px;
-  display:flex;
-  justify-content:space-between;
-  align-items:center;
-  opacity:0;
-  transform:translateY(-6px);
-  transition:all 0.28s;
-}
+.task{background:#222;padding:8px;border-radius:6px;display:flex;justify-content:space-between;align-items:center;opacity:0;transform:translateY(-6px);transition:all 0.28s;}
 .task.show{opacity:1;transform:translateY(0);}
 .task .info{font-size:13px;color:#ddd;}
 .task button{background:#b22222;color:#fff;border:none;border-radius:6px;padding:6px 8px;cursor:pointer;}
-
-.select-all-btn{
-  background:#444;
-  color:#eee;
-  padding:8px 12px;
-  border-radius:6px;
-  width:fit-content;
-  cursor:pointer;
-  margin-bottom:8px;
-  transition:all 0.16s;
-}
+.select-all-btn{background:#444;color:#eee;padding:8px 12px;border-radius:6px;width:fit-content;cursor:pointer;margin-bottom:8px;transition:all 0.16s;}
 .select-all-btn:hover{background:#555;transform:scale(1.02);}
-
-/* responsive tweaks */
-@media(max-width:480px){
-  .timer-row{flex-direction:row;gap:4px;}
-  .timer-row input{flex:1; min-width:0;}
-  .device .top{flex-direction:column;align-items:flex-start;}
-}
+@media(max-width:480px){.timer-row{flex-direction:row;gap:4px;}.timer-row input{flex:1; min-width:0;}.device .top{flex-direction:column;align-items:flex-start;}}
 </style>
 
 <h2>Remote Control</h2>
@@ -130,6 +52,7 @@ h2{margin-bottom:12px;}
 <script>
 let state = { devices: {}, selected: new Set() };
 
+// --- fetchDevices, renderDevice ve updateDeviceUI aynen ---
 async function fetchDevices(){
     try{
         const r = await fetch('/devices');
@@ -137,7 +60,6 @@ async function fetchDevices(){
         const devs = await r.json() || [];
         const newIPs = devs.map(d => d.ip);
 
-        // eski client'ları sil
         Object.keys(state.devices).forEach(ip => {
             if(!newIPs.includes(ip)){
                 const el = document.querySelector(`.device input[data-ip="${ip}"]`)?.closest('.device');
@@ -147,7 +69,6 @@ async function fetchDevices(){
             }
         });
 
-        // yeni cihazları ekle veya güncelle
         devs.forEach(d => {
             if(!state.devices[d.ip]){
                 renderDevice(d);
@@ -161,51 +82,34 @@ async function fetchDevices(){
     }catch(e){ console.error("fetchDevices error", e); }
 }
 
-function updateDeviceUI(ip, d){
-    renderTasksForDevice(ip, d.tasks || []);
-    // checkbox durumunu güncelle
-    const checkbox = document.querySelector(`.device input[data-ip="${ip}"]`);
-    if(checkbox){
-        checkbox.checked = state.selected.has(ip);
-    }
-}
+function updateDeviceUI(ip, d){ renderTasksForDevice(ip, d.tasks || []); const checkbox = document.querySelector(`.device input[data-ip="${ip}"]`); if(checkbox) checkbox.checked = state.selected.has(ip); }
 
 function renderDevice(d){
     const container = document.getElementById('devices');
     const div = document.createElement('div');
     div.className = 'device';
-    // checkbox durumunu state.selected ile kontrol et
     const checked = state.selected.has(d.ip) ? 'checked' : '';
-    div.innerHTML = `
-      <div class="top">
-        <input type="checkbox" data-ip="${d.ip}" ${checked}/>
-        <div class="name">${escapeHtml(d.name || d.ip)}</div>
-      </div>
-      <div class="tasks" id="tasks_${d.ip}"></div>
-    `;
+    div.innerHTML = `<div class="top"><input type="checkbox" data-ip="${d.ip}" ${checked}/><div class="name">${escapeHtml(d.name||d.ip)}</div></div><div class="tasks" id="tasks_${d.ip}"></div>`;
     div.querySelector('input[type=checkbox]').addEventListener('change', e=>{
         if(e.target.checked) state.selected.add(d.ip);
         else state.selected.delete(d.ip);
     });
     container.appendChild(div);
-    setTimeout(()=>div.classList.add('show'), 40);
+    setTimeout(()=>div.classList.add('show'),40);
     renderTasksForDevice(d.ip, d.tasks || []);
 }
 
 function renderTasksForDevice(ip, tasks){
     const tcont = document.getElementById('tasks_' + ip);
     if(!tcont) return;
-    tcont.innerHTML = ''; // önce temizle
-    tasks.forEach((t, idx) => {
+    tcont.innerHTML = '';
+    tasks.forEach((t, idx)=>{
         const taskDiv = document.createElement('div');
         taskDiv.className = 'task';
-        taskDiv.innerHTML = `
-            <div class="info"><strong>${escapeHtml(t.url)}</strong><div id="time_${ip}_${idx}"></div></div>
-            <div><button class="delete-btn">Delete</button></div>
-        `;
-        taskDiv.querySelector('.delete-btn').addEventListener('click', ()=> deleteTask(ip, idx));
+        taskDiv.innerHTML = `<div class="info"><strong>${escapeHtml(t.url)}</strong><div id="time_${ip}_${idx}"></div></div><div><button class="delete-btn">Delete</button></div>`;
+        taskDiv.querySelector('.delete-btn').addEventListener('click', ()=> deleteTask(ip, t.run_at));
         tcont.appendChild(taskDiv);
-        setTimeout(()=>taskDiv.classList.add('show'), 30);
+        setTimeout(()=>taskDiv.classList.add('show'),30);
         updateSingleCountdown(ip, idx, t.run_at);
     });
 }
@@ -216,63 +120,46 @@ function updateSingleCountdown(ip, idx, run_at_iso){
     if(!el) return;
     const runAt = parseIso(run_at_iso);
     const diff = Math.max(0, Math.floor((runAt - new Date())/1000));
-    const h = Math.floor(diff/3600), m = Math.floor((diff%3600)/60), s = diff%60;
-    el.innerText = `in ${h}h ${m}m ${s}s`;
+    const h=Math.floor(diff/3600), m=Math.floor((diff%3600)/60), s=diff%60;
+    el.innerText=`in ${h}h ${m}m ${s}s`;
 }
 
-setInterval(()=> {
-    Object.keys(state.devices).forEach(ip => {
-        const d = state.devices[ip];
-        (d.tasks || []).forEach((t, idx) => updateSingleCountdown(ip, idx, t.run_at));
-    });
-}, 1000);
+setInterval(()=>{Object.keys(state.devices).forEach(ip=>{(state.devices[ip].tasks||[]).forEach((t,idx)=>updateSingleCountdown(ip,idx,t.run_at))});},1000);
 
-function getDelaySec(){
-    const h = parseInt(document.getElementById('hours').value) || 0;
-    const m = parseInt(document.getElementById('minutes').value) || 0;
-    const s = parseInt(document.getElementById('seconds').value) || 0;
-    return h*3600 + m*60 + s;
-}
+function getDelaySec(){const h=parseInt(document.getElementById('hours').value)||0;const m=parseInt(document.getElementById('minutes').value)||0;const s=parseInt(document.getElementById('seconds').value)||0;return h*3600+m*60+s;}
 
 async function openSelected(){
-    const url = document.getElementById('url').value.trim();
-    if(!url) { alert('URL boş olamaz'); return; }
-    const ips = Array.from(state.selected);
-    if(ips.length === 0) { alert('Seçili cihaz yok'); return; }
-    const delay = getDelaySec();
+    const url=document.getElementById('url').value.trim();
+    if(!url){alert('URL boş olamaz'); return;}
+    const ips=Array.from(state.selected);
+    if(ips.length===0){alert('Seçili cihaz yok'); return;}
+    const delay=getDelaySec();
     try{
-        const r = await fetch('/open', {
-            method:'POST',
-            headers:{'Content-Type':'application/json'},
-            body: JSON.stringify({ ips, url, delay_sec: delay })
-        });
-        await r.json();
-        setTimeout(fetchDevices, 800);
-    }catch(e){ console.error(e); }
+        for(const ip of ips){
+            await fetch('/open', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({url, delay_sec:delay})});
+        }
+        setTimeout(fetchDevices,800);
+    }catch(e){console.error(e);}
 }
 
-async function deleteTask(ip, index){
+async function deleteTask(ip, run_at){
     try{
-        const r = await fetch('/delete_task', {
-            method:'POST',
-            headers:{'Content-Type':'application/json'},
-            body: JSON.stringify({ ip, index })
-        });
+        const r = await fetch('/delete_task_by_runat', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ip, run_at})});
         const j = await r.json();
         if(j.ok) fetchDevices();
-    }catch(e){ console.error(e); }
+    }catch(e){console.error(e);}
 }
 
 function toggleSelectAll(){
-    const all = Object.keys(state.devices);
-    const allSelected = all.every(ip => state.selected.has(ip));
+    const all=Object.keys(state.devices);
+    const allSelected=all.every(ip=>state.selected.has(ip));
     if(allSelected) state.selected.clear();
-    else all.forEach(ip => state.selected.add(ip));
+    else all.forEach(ip=>state.selected.add(ip));
     fetchDevices();
 }
 
-function escapeHtml(s){ return (s||'').toString().replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]); }
+function escapeHtml(s){ return (s||'').toString().replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]); }
 
 fetchDevices();
-setInterval(fetchDevices, 3000);
+setInterval(fetchDevices,3000);
 </script>

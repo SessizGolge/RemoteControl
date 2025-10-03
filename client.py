@@ -1,5 +1,4 @@
 # client_sync.pyw
-# Gereksinimler: pip install flask requests
 import socket, threading, json, os, sys, time, subprocess, webbrowser, requests, string
 from flask import Flask, request, jsonify
 from datetime import datetime, timedelta
@@ -15,8 +14,9 @@ POSSIBLE_SERVERS = [
 app = Flask(__name__)
 task_queue = []
 server_ip = None
-server_port = 443  # HTTPS port
+server_port = 443
 CLIENT_NAME = None
+TASK_FILE = "tasks.json"
 
 # ---------------- Client Name / File ----------------
 def find_disk_root_file(basename=".remote_client_name", folder_name="RemoteClient"):
@@ -62,6 +62,7 @@ def show_toast(message, duration=2000):
     root.after(duration + 100, root.destroy)
     root.mainloop()
 
+# ---------------- Client Name ----------------
 if os.path.exists(CLIENT_FILE):
     with open(CLIENT_FILE, "r", encoding="utf-8") as f:
         CLIENT_NAME = f.read().strip()
@@ -81,6 +82,19 @@ else:
         f.write(CLIENT_NAME)
     show_toast(f"{CLIENT_NAME} çalışıyor", duration=1500)
 
+# ---------------- Persistent Tasks ----------------
+def save_tasks():
+    with open(TASK_FILE, "w", encoding="utf-8") as f:
+        json.dump([{"url": t["url"], "run_at": t["run_at_iso"]} for t in task_queue], f)
+
+def load_tasks():
+    if os.path.exists(TASK_FILE):
+        with open(TASK_FILE, "r", encoding="utf-8") as f:
+            for t in json.load(f):
+                task_queue.append({"url": t["url"], "run_at": datetime.fromisoformat(t["run_at"]), "run_at_iso": t["run_at"]})
+
+load_tasks()
+
 # ---------------- URL açma ----------------
 def open_url_platform(url):
     try:
@@ -98,16 +112,14 @@ def open_url_platform(url):
 def task_worker():
     while True:
         now = datetime.now()
-        to_run = []
-        for t in task_queue:
-            if now >= t['run_at']:
-                to_run.append(t)
+        to_run = [t for t in task_queue if now >= t['run_at']]
         for t in to_run:
             open_url_platform(t['url'])
             try:
                 task_queue.remove(t)
             except:
                 pass
+        save_tasks()
         time.sleep(1)
 
 threading.Thread(target=task_worker, daemon=True).start()
@@ -128,8 +140,17 @@ def open_endpoint():
     run_at_iso = run_at_dt.isoformat()
     if not any(t['url'] == url and t['run_at_iso'] == run_at_iso for t in task_queue):
         task_queue.append({'run_at': run_at_dt, 'run_at_iso': run_at_iso, 'url': url})
-
+        save_tasks()
     return jsonify({'ok': True, 'scheduled_for': run_at_iso})
+
+@app.route('/delete_task_by_runat', methods=['POST'])
+def delete_task_by_runat():
+    data = request.get_json() or {}
+    url = data.get('url')
+    run_at = data.get('run_at')
+    task_queue[:] = [t for t in task_queue if not (t['url'] == url and t['run_at_iso'] == run_at)]
+    save_tasks()
+    return jsonify({'ok': True})
 
 # ---------------- Server Discovery / Register ----------------
 def register_with_server(host):
@@ -174,6 +195,7 @@ def fetch_tasks_loop():
                                 'run_at': datetime.fromisoformat(t['run_at']),
                                 'run_at_iso': t['run_at']
                             })
+                    save_tasks()
             except:
                 pass
         time.sleep(3)
