@@ -129,18 +129,37 @@ setInterval(()=>{Object.keys(state.devices).forEach(ip=>{(state.devices[ip].task
 function getDelaySec(){const h=parseInt(document.getElementById('hours').value)||0;const m=parseInt(document.getElementById('minutes').value)||0;const s=parseInt(document.getElementById('seconds').value)||0;return h*3600+m*60+s;}
 
 async function openSelected(){
-    const url=document.getElementById('url').value.trim();
-    if(!url){alert('URL boş olamaz'); return;}
-    const ips=Array.from(state.selected);
-    if(ips.length===0){alert('Seçili cihaz yok'); return;}
-    const delay=getDelaySec();
+    const url = document.getElementById('url').value.trim();
+    if(!url) { alert('URL boş olamaz'); return; }
+
+    const ips = Array.from(state.selected);
+    if(ips.length === 0) { alert('Seçili cihaz yok'); return; }
+
+    const delay = getDelaySec();
+
     try{
         for(const ip of ips){
-            await fetch('/open', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({url, delay_sec:delay})});
+            const clientUrl = `http://${ip}:8080/open`; // client.py HTTP_PORT ile eşleşmeli
+            await fetch(clientUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type':'application/json'
+                },
+                body: JSON.stringify({
+                    token: 'superdupersecrettoken', // client.py TOKEN ile aynı olmalı
+                    url: url,
+                    delay_sec: delay
+                })
+            });
         }
-        setTimeout(fetchDevices,800);
-    }catch(e){console.error(e);}
+        // küçük delay sonrası cihazları güncelle
+        setTimeout(fetchDevices, 800);
+    }catch(e){
+        console.error("openSelected error", e);
+        alert("Task gönderilemedi, konsolu kontrol et.");
+    }
 }
+
 
 async function deleteTask(ip, run_at){
     try{
