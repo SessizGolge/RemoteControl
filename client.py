@@ -1,4 +1,4 @@
-# client.py
+# client_sync.pyw
 # Gereksinimler: pip install flask requests
 import socket, threading, json, os, sys, time, subprocess, webbrowser, requests, string
 from flask import Flask, request, jsonify
@@ -9,67 +9,43 @@ from tkinter import simpledialog, messagebox
 TOKEN = "superdupersecrettoken"
 HTTP_PORT = 8080
 POSSIBLE_SERVERS = [
-    "remotecontrol-9hw8.onrender.com:5000"
+    "remotecontrol-9hw8.onrender.com"
 ]
 
 app = Flask(__name__)
-# task_queue: list of dicts {run_at: datetime, run_at_iso: str, url: str}
 task_queue = []
 server_ip = None
-server_port = None
+server_port = 443  # HTTPS port
+CLIENT_NAME = None
 
-# ---------------- Client File helpers ----------------
+# ---------------- Client Name / File ----------------
 def find_disk_root_file(basename=".remote_client_name", folder_name="RemoteClient"):
     candidates = []
-    drive_root = None
-    try:
-        drive, _ = os.path.splitdrive(os.getcwd())
-        if drive:
-            drive_root = os.path.join(drive + os.sep)
-        else:
-            drive_root = os.sep
-    except:
-        drive_root = os.sep
+    drive_root = os.path.abspath(os.sep)
     candidates.append(drive_root)
-
     if sys.platform.startswith("win"):
         for d in string.ascii_uppercase:
             candidates.append(d + ":\\")
         candidates += [os.environ.get("PUBLIC", "C:\\Users\\Public")]
     else:
-        candidates += ["/sdcard", "/storage/emulated/0", "/mnt", "/media", "/", "/opt", "/var/tmp", "/tmp"]
+        candidates += ["/sdcard", "/storage/emulated/0", "/mnt", "/media", "/", "/tmp"]
 
     for root in candidates:
-        if not root:
-            continue
         try:
-            root = os.path.abspath(root)
             target_dir = os.path.join(root, folder_name)
             os.makedirs(target_dir, exist_ok=True)
-            test_path = os.path.join(target_dir, ".write_test")
-            with open(test_path, "w", encoding="utf-8") as tf:
-                tf.write("ok")
-            os.remove(test_path)
             return os.path.join(target_dir, basename)
-        except Exception:
+        except:
             continue
-
-    try:
-        fallback = os.path.join(os.path.expanduser("~"), folder_name)
-        os.makedirs(fallback, exist_ok=True)
-        return os.path.join(fallback, basename)
-    except Exception:
-        return os.path.join(os.getcwd(), basename)
+    return os.path.join(os.getcwd(), basename)
 
 CLIENT_FILE = find_disk_root_file()
-print(f"[client] using client file path: {CLIENT_FILE}")
 
-# ---------------- Tkinter toast + client name (zorunlu) ----------------
-root = tk.Tk()
-root.withdraw()  # gizle background
-
+# ---------------- Tkinter Toast ----------------
 def show_toast(message, duration=2000):
-    toast = tk.Toplevel()
+    root = tk.Tk()
+    root.withdraw()
+    toast = tk.Toplevel(root)
     toast.overrideredirect(True)
     toast.configure(bg="#222")
     label = tk.Label(toast, text=message, fg="white", bg="#222", font=("Arial", 12))
@@ -83,51 +59,33 @@ def show_toast(message, duration=2000):
     y = (hs // 2) - (h // 2)
     toast.geometry(f"{w}x{h}+{x}+{y}")
     toast.after(duration, toast.destroy)
+    root.after(duration + 100, root.destroy)
+    root.mainloop()
 
 if os.path.exists(CLIENT_FILE):
     with open(CLIENT_FILE, "r", encoding="utf-8") as f:
         CLIENT_NAME = f.read().strip()
     show_toast(f"{CLIENT_NAME} çalışıyor", duration=1500)
-    root.after(1700, root.destroy)
 else:
-    CLIENT_NAME = None
     while not CLIENT_NAME:
+        root = tk.Tk()
+        root.withdraw()
         CLIENT_NAME = simpledialog.askstring("LAN Remote", "Client ismini girin:")
         if CLIENT_NAME:
             CLIENT_NAME = CLIENT_NAME.strip()
         if not CLIENT_NAME:
             messagebox.showwarning("Hata", "Client ismi boş olamaz!")
+        root.destroy()
     os.makedirs(os.path.dirname(CLIENT_FILE), exist_ok=True)
     with open(CLIENT_FILE, "w", encoding="utf-8") as f:
         f.write(CLIENT_NAME)
     show_toast(f"{CLIENT_NAME} çalışıyor", duration=1500)
-    root.after(1700, root.destroy)
-
-root.mainloop()
-
-# ---------------- Konsol gizleme (Windows) ----------------
-if os.name == 'nt':
-    try:
-        import ctypes
-        whnd = ctypes.windll.kernel32.GetConsoleWindow()
-        if whnd != 0:
-            ctypes.windll.user32.ShowWindow(whnd, 0)
-    except:
-        pass
 
 # ---------------- URL açma ----------------
-def shutil_which(name):
-    for path in os.environ.get("PATH", "").split(os.pathsep):
-        f = os.path.join(path, name)
-        if os.path.isfile(f) and os.access(f, os.X_OK):
-            return f
-    return None
-
 def open_url_platform(url):
     try:
-        if shutil_which('termux-open'):
-            subprocess.Popen(['termux-open', url])
-            return True
+        subprocess.Popen(['termux-open', url])
+        return True
     except:
         pass
     try:
@@ -136,7 +94,7 @@ def open_url_platform(url):
     except:
         return False
 
-# ---------------- Task worker ----------------
+# ---------------- Task Worker ----------------
 def task_worker():
     while True:
         now = datetime.now()
@@ -145,7 +103,6 @@ def task_worker():
             if now >= t['run_at']:
                 to_run.append(t)
         for t in to_run:
-            print(f"[client] {datetime.now().strftime('%H:%M:%S')} - Opening scheduled URL: {t['url']}")
             open_url_platform(t['url'])
             try:
                 task_queue.remove(t)
@@ -155,7 +112,7 @@ def task_worker():
 
 threading.Thread(target=task_worker, daemon=True).start()
 
-# ---------------- Flask endpoints ----------------
+# ---------------- Flask Endpoints ----------------
 @app.route('/open', methods=['POST'])
 def open_endpoint():
     data = request.get_json() or {}
@@ -169,96 +126,64 @@ def open_endpoint():
 
     run_at_dt = (datetime.now() + timedelta(seconds=delay_sec)).replace(microsecond=0)
     run_at_iso = run_at_dt.isoformat()
-    task_entry = {'run_at': run_at_dt, 'run_at_iso': run_at_iso, 'url': url}
-    # duplicate kontrol (aynı url+run_at varsa atlama)
     if not any(t['url'] == url and t['run_at_iso'] == run_at_iso for t in task_queue):
-        task_queue.append(task_entry)
-        print(f"[client] Task added: {url} -> scheduled for {run_at_iso}")
-
-    # server'a bildir (server /add_task ile task kaydetsin)
-    global server_ip, server_port
-    if server_ip:
-        try:
-            requests.post(f"http://{server_ip}:{server_port}/add_task", json={
-                "token": TOKEN,
-                "url": url,
-                "run_at": run_at_iso
-            }, timeout=2)
-        except:
-            pass
+        task_queue.append({'run_at': run_at_dt, 'run_at_iso': run_at_iso, 'url': url})
 
     return jsonify({'ok': True, 'scheduled_for': run_at_iso})
 
-@app.route('/delete_task_by_runat', methods=['POST'])
-def delete_task_by_runat():
-    data = request.get_json() or {}
-    url = data.get('url')
-    run_at = data.get('run_at')
-    removed = False
-    for t in task_queue[:]:
-        if t['url'] == url and t['run_at_iso'] == run_at:
-            try:
-                task_queue.remove(t)
-                removed = True
-                print(f"[client] Task removed (run_at): {url} @ {run_at}")
-            except:
-                pass
-    return jsonify({'ok': removed})
-
-# backward compatibility (sil URL ile)
-@app.route('/delete_task_by_url', methods=['POST'])
-def delete_task_by_url():
-    data = request.get_json() or {}
-    url = data.get('url')
-    removed = False
-    for t in task_queue[:]:
-        if t['url'] == url:
-            try:
-                task_queue.remove(t)
-                removed = True
-                print(f"[client] Task removed (url): {url}")
-            except:
-                pass
-    return jsonify({'ok': removed})
-
-# ---------------- server register ----------------
-def register_with_server(ip, port):
+# ---------------- Server Discovery / Register ----------------
+def register_with_server(host):
+    global server_ip
     try:
-        url = f"https://{ip}:{port}/register"  # cloud server HTTPS
-        data = {"name": CLIENT_NAME}
-        resp = requests.post(url, json=data, timeout=5, verify=False)  # SSL hatasını yoksay
+        url = f"https://{host}/register"
+        resp = requests.post(url, json={"name": CLIENT_NAME}, timeout=5, verify=True)
         if resp.status_code == 200:
-            print(f"[client] Registered with server {ip}:{port}")
+            server_ip = host
             return True
-    except Exception as e:
-        print(f"[client] Register failed: {e}")
+    except:
+        pass
     return False
 
 def discover_server():
-    global server_ip, server_port
     for s in POSSIBLE_SERVERS:
-        ip, port = s.split(":")
-        port = int(port)
-        if register_with_server(ip, port):
-            server_ip, server_port = ip, port
-            return ip, port
-    return None, None
+        if register_with_server(s):
+            return True
+    return False
 
-def auto_register_loop(ip, port):
+def auto_register_loop():
     while True:
-        register_with_server(ip, port)
+        if server_ip:
+            try:
+                requests.post(f"https://{server_ip}/register", json={"name": CLIENT_NAME}, timeout=5, verify=True)
+            except:
+                pass
         time.sleep(5)
 
-# ---------------- main loop ----------------
-def main_loop():
+# ---------------- Server Task Sync ----------------
+def fetch_tasks_loop():
     while True:
-        discover_server()
         if server_ip:
-            threading.Thread(target=auto_register_loop, args=(server_ip, server_port), daemon=True).start()
-            break
-        else:
-            print("[client] ⚠ Server bulunamadı, 5 saniye sonra tekrar denenecek...")
-            time.sleep(5)
+            try:
+                r = requests.get(f"https://{server_ip}/tasks_for_client?token={TOKEN}", timeout=5, verify=True)
+                if r.ok:
+                    server_tasks = r.json().get('tasks', [])
+                    for t in server_tasks:
+                        if not any(existing['url'] == t['url'] and existing['run_at_iso'] == t['run_at'] for existing in task_queue):
+                            task_queue.append({
+                                'url': t['url'],
+                                'run_at': datetime.fromisoformat(t['run_at']),
+                                'run_at_iso': t['run_at']
+                            })
+            except:
+                pass
+        time.sleep(3)
+
+# ---------------- Main Loop ----------------
+def main_loop():
+    while not discover_server():
+        time.sleep(5)
+    threading.Thread(target=auto_register_loop, daemon=True).start()
+    threading.Thread(target=fetch_tasks_loop, daemon=True).start()
 
 if __name__ == "__main__":
     threading.Thread(target=main_loop, daemon=True).start()

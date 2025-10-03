@@ -1,8 +1,9 @@
 # server.py
 # Gereksinimler: pip install flask requests
 from flask import Flask, jsonify, request, render_template
-import socket, requests, time
+import time
 from datetime import datetime, timedelta
+import requests
 
 TOKEN = "superdupersecrettoken"
 app = Flask(__name__)
@@ -10,8 +11,7 @@ devices = {}  # ip -> {"name":..., "http_port":..., "last_seen":..., "tasks":[{"
 
 @app.route('/')
 def ui():
-    # ui.html dosyasını templates klasörüne koymalısın
-    return render_template("ui.html")
+    return render_template("ui.html")  # templates klasörüne koy
 
 @app.route('/register', methods=['POST'])
 def register():
@@ -32,14 +32,11 @@ def register():
 @app.route('/devices')
 def get_devices():
     now = time.time()
-    # temizle (10s görmezden gelme)
     for ip, d in list(devices.items()):
         if now - d.get("last_seen", 0) > 10:
             devices.pop(ip, None)
-    # tasks alanının garantilenmesi
     for ip, d in devices.items():
-        if "tasks" not in d:
-            d["tasks"] = []
+        d.setdefault("tasks", [])
     return jsonify(list(devices.values()))
 
 @app.route('/open', methods=['POST'])
@@ -57,13 +54,10 @@ def open_on_clients():
             target = f"http://{ip}:8080/open"
             r = requests.post(target, json={'token': TOKEN, 'url': url, 'delay_sec': delay_sec}, timeout=4, verify=False)
             resp = {}
-            try:
-                resp = r.json()
-            except:
-                pass
+            try: resp = r.json()
+            except: pass
             results.append({'ip': ip, 'status': r.status_code, 'resp': resp})
 
-            # server tarafında gözüksün diye task ekle (ISO second precision)
             run_at = (datetime.now() + timedelta(seconds=delay_sec)).replace(microsecond=0)
             run_at_iso = run_at.isoformat()
             devices.setdefault(ip, {}).setdefault("tasks", [])
@@ -73,6 +67,16 @@ def open_on_clients():
             results.append({'ip': ip, 'error': str(e)})
 
     return jsonify({'results': results})
+
+@app.route('/tasks_for_client')
+def tasks_for_client():
+    token = request.args.get('token')
+    if token != TOKEN:
+        return jsonify({'tasks': []}), 401
+    all_tasks = []
+    for dev in devices.values():
+        all_tasks.extend(dev.get('tasks', []))
+    return jsonify({'tasks': all_tasks})
 
 @app.route('/add_task', methods=['POST'])
 def add_task_from_client():
@@ -98,7 +102,6 @@ def delete_task():
     index = data.get('index')
     if ip in devices and "tasks" in devices[ip] and 0 <= int(index) < len(devices[ip]["tasks"]):
         task = devices[ip]["tasks"].pop(int(index))
-        # client'e bildir; client run_at ile silme yapacak
         try:
             requests.post(f"http://{ip}:8080/delete_task_by_runat", json={
                 "url": task["url"],
