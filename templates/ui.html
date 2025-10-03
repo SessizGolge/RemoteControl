@@ -52,71 +52,90 @@ h2{margin-bottom:12px;}
 <script>
 let state = { devices: {}, selected: new Set() };
 
-// --- fetchDevices, renderDevice ve updateDeviceUI aynen ---
+// --- Device listesini server’dan çek ---
 async function fetchDevices(){
     try{
         const r = await fetch('/devices');
         if(!r.ok) throw new Error('devices err');
         const devs = await r.json() || [];
-        const newIPs = devs.map(d => d.ip);
 
-        Object.keys(state.devices).forEach(ip => {
-            if(!newIPs.includes(ip)){
-                const el = document.querySelector(`.device input[data-ip="${ip}"]`)?.closest('.device');
+        const newNames = devs.map(d => d.name);
+
+        Object.keys(state.devices).forEach(name => {
+            if(!newNames.includes(name)){
+                const el = document.querySelector(`.device input[data-name="${name}"]`)?.closest('.device');
                 if(el) el.remove();
-                delete state.devices[ip];
-                state.selected.delete(ip);
+                delete state.devices[name];
+                state.selected.delete(name);
             }
         });
 
         devs.forEach(d => {
-            if(!state.devices[d.ip]){
+            if(!state.devices[d.name]){
                 renderDevice(d);
             } else {
-                state.devices[d.ip].tasks = d.tasks;
-                updateDeviceUI(d.ip, d);
+                state.devices[d.name].tasks = d.tasks;
+                updateDeviceUI(d.name, d);
             }
-            state.devices[d.ip] = d;
+            state.devices[d.name] = d;
         });
 
     }catch(e){ console.error("fetchDevices error", e); }
 }
 
-function updateDeviceUI(ip, d){ renderTasksForDevice(ip, d.tasks || []); const checkbox = document.querySelector(`.device input[data-ip="${ip}"]`); if(checkbox) checkbox.checked = state.selected.has(ip); }
+// --- Güncelle ---
+function updateDeviceUI(name, d){
+    renderTasksForDevice(name, d.tasks || []);
+    const checkbox = document.querySelector(`.device input[data-name="${name}"]`);
+    if(checkbox) checkbox.checked = state.selected.has(name);
+}
 
+// --- Device render ---
 function renderDevice(d){
     const container = document.getElementById('devices');
     const div = document.createElement('div');
     div.className = 'device';
-    const checked = state.selected.has(d.ip) ? 'checked' : '';
-    div.innerHTML = `<div class="top"><input type="checkbox" data-ip="${d.ip}" ${checked}/><div class="name">${escapeHtml(d.name||d.ip)}</div></div><div class="tasks" id="tasks_${d.ip}"></div>`;
+    const checked = state.selected.has(d.name) ? 'checked' : '';
+    div.innerHTML = `
+      <div class="top">
+        <input type="checkbox" data-name="${d.name}" ${checked}/>
+        <div class="name">${escapeHtml(d.name)}</div>
+      </div>
+      <div class="tasks" id="tasks_${d.name}"></div>
+    `;
     div.querySelector('input[type=checkbox]').addEventListener('change', e=>{
-        if(e.target.checked) state.selected.add(d.ip);
-        else state.selected.delete(d.ip);
+        if(e.target.checked) state.selected.add(d.name);
+        else state.selected.delete(d.name);
     });
     container.appendChild(div);
-    setTimeout(()=>div.classList.add('show'),40);
-    renderTasksForDevice(d.ip, d.tasks || []);
+    setTimeout(()=>div.classList.add('show'), 40);
+    renderTasksForDevice(d.name, d.tasks || []);
 }
 
-function renderTasksForDevice(ip, tasks){
-    const tcont = document.getElementById('tasks_' + ip);
+// --- Task render ---
+function renderTasksForDevice(name, tasks){
+    const tcont = document.getElementById('tasks_' + name);
     if(!tcont) return;
     tcont.innerHTML = '';
     tasks.forEach((t, idx)=>{
         const taskDiv = document.createElement('div');
         taskDiv.className = 'task';
-        taskDiv.innerHTML = `<div class="info"><strong>${escapeHtml(t.url)}</strong><div id="time_${ip}_${idx}"></div></div><div><button class="delete-btn">Delete</button></div>`;
-        taskDiv.querySelector('.delete-btn').addEventListener('click', ()=> deleteTask(ip, t.run_at));
+        taskDiv.innerHTML = `
+            <div class="info"><strong>${escapeHtml(t.url)}</strong>
+            <div id="time_${name}_${idx}"></div></div>
+            <div><button class="delete-btn">Delete</button></div>
+        `;
+        taskDiv.querySelector('.delete-btn').addEventListener('click', ()=> deleteTask(name, t.run_at));
         tcont.appendChild(taskDiv);
         setTimeout(()=>taskDiv.classList.add('show'),30);
-        updateSingleCountdown(ip, idx, t.run_at);
+        updateSingleCountdown(name, idx, t.run_at);
     });
 }
 
+// --- Countdown ---
 function parseIso(s){ return new Date(s); }
-function updateSingleCountdown(ip, idx, run_at_iso){
-    const el = document.getElementById(`time_${ip}_${idx}`);
+function updateSingleCountdown(name, idx, run_at_iso){
+    const el = document.getElementById(`time_${name}_${idx}`);
     if(!el) return;
     const runAt = parseIso(run_at_iso);
     const diff = Math.max(0, Math.floor((runAt - new Date())/1000));
@@ -124,56 +143,67 @@ function updateSingleCountdown(ip, idx, run_at_iso){
     el.innerText=`in ${h}h ${m}m ${s}s`;
 }
 
-setInterval(()=>{Object.keys(state.devices).forEach(ip=>{(state.devices[ip].tasks||[]).forEach((t,idx)=>updateSingleCountdown(ip,idx,t.run_at))});},1000);
+setInterval(()=>{Object.keys(state.devices).forEach(name=>{(state.devices[name].tasks||[]).forEach((t,idx)=>updateSingleCountdown(name,idx,t.run_at))});},1000);
 
-function getDelaySec(){const h=parseInt(document.getElementById('hours').value)||0;const m=parseInt(document.getElementById('minutes').value)||0;const s=parseInt(document.getElementById('seconds').value)||0;return h*3600+m*60+s;}
+// --- Timer ---
+function getDelaySec(){
+    const h=parseInt(document.getElementById('hours').value)||0;
+    const m=parseInt(document.getElementById('minutes').value)||0;
+    const s=parseInt(document.getElementById('seconds').value)||0;
+    return h*3600+m*60+s;
+}
 
+// --- Run Selected (server /add_task) ---
 async function openSelected(){
     const url = document.getElementById('url').value.trim();
-    if(!url) { alert('URL boş olamaz'); return; }
+    if(!url){ alert('URL boş olamaz'); return; }
 
-    const ips = Array.from(state.selected);
-    if(ips.length === 0) { alert('Seçili cihaz yok'); return; }
+    const clients = Array.from(state.selected);
+    if(clients.length===0){ alert('Seçili client yok'); return; }
 
     const delay = getDelaySec();
+    const run_at = new Date(Date.now() + delay*1000).toISOString();
 
     try{
-        for(const ip of ips){
-            const clientUrl = `http://${ip}:8080/open`; // client.py HTTP_PORT ile eşleşmeli
-            await fetch(clientUrl, {
-                method: 'POST',
-                headers: {
-                    'Content-Type':'application/json'
-                },
-                body: JSON.stringify({
-                    token: 'superdupersecrettoken', // client.py TOKEN ile aynı olmalı
-                    url: url,
-                    delay_sec: delay
-                })
-            });
-        }
-        // küçük delay sonrası cihazları güncelle
-        setTimeout(fetchDevices, 800);
-    }catch(e){
-        console.error("openSelected error", e);
-        alert("Task gönderilemedi, konsolu kontrol et.");
-    }
-}
-
-
-async function deleteTask(ip, run_at){
-    try{
-        const r = await fetch('/delete_task_by_runat', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ip, run_at})});
+        const r = await fetch('/add_task', {
+            method:'POST',
+            headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({
+                token: 'superdupersecrettoken', // gizli token
+                clients: clients,
+                url: url,
+                run_at_iso: run_at
+            })
+        });
         const j = await r.json();
         if(j.ok) fetchDevices();
-    }catch(e){console.error(e);}
+        else alert('Task gönderilemedi: '+(j.error||''));
+    }catch(e){ console.error(e); alert('Task gönderilemedi, konsolu kontrol et.'); }
 }
 
+// --- Delete task ---
+async function deleteTask(client, run_at){
+    try{
+        const r = await fetch('/delete_task', {
+            method:'POST',
+            headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({
+                token: 'superdupersecrettoken',
+                client: client,
+                run_at_iso: run_at
+            })
+        });
+        const j = await r.json();
+        if(j.ok) fetchDevices();
+    }catch(e){ console.error(e); }
+}
+
+// --- Select all ---
 function toggleSelectAll(){
     const all=Object.keys(state.devices);
-    const allSelected=all.every(ip=>state.selected.has(ip));
+    const allSelected=all.every(name=>state.selected.has(name));
     if(allSelected) state.selected.clear();
-    else all.forEach(ip=>state.selected.add(ip));
+    else all.forEach(name=>state.selected.add(name));
     fetchDevices();
 }
 
@@ -182,3 +212,4 @@ function escapeHtml(s){ return (s||'').toString().replace(/[&<>"']/g,c=>({'&':'&
 fetchDevices();
 setInterval(fetchDevices,3000);
 </script>
+
