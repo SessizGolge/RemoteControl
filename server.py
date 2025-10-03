@@ -1,6 +1,6 @@
 # server.py
 # Gereksinimler: pip install flask python-dotenv
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, render_template
 from datetime import datetime
 from dotenv import load_dotenv
 import os
@@ -13,6 +13,10 @@ app = Flask(__name__)
 
 # Global storage (basit, memory-based, production için DB lazım)
 clients = {}  # name -> {ip, last_seen, tasks: [{url, run_at_iso}]}
+
+@app.route('/')
+def index():
+    return render_template('ui.html')
 
 @app.route('/register', methods=['POST'])
 def register():
