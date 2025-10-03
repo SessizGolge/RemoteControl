@@ -55,7 +55,7 @@ def open_on_clients():
     for ip in ips:
         try:
             target = f"http://{ip}:8080/open"
-            r = requests.post(target, json={'token': TOKEN, 'url': url, 'delay_sec': delay_sec}, timeout=4)
+            r = requests.post(target, json={'token': TOKEN, 'url': url, 'delay_sec': delay_sec}, timeout=4, verify=False)
             resp = {}
             try:
                 resp = r.json()
@@ -103,18 +103,12 @@ def delete_task():
             requests.post(f"http://{ip}:8080/delete_task_by_runat", json={
                 "url": task["url"],
                 "run_at": task["run_at"]
-            }, timeout=2)
+            }, timeout=2, verify=False)
         except:
             pass
         return jsonify({"ok": True})
     return jsonify({"ok": False}), 400
 
 if __name__ == '__main__':
-    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    try:
-        s.connect(("8.8.8.8", 80))
-        local_ip = s.getsockname()[0]
-    except:
-        local_ip = "127.0.0.1"
-    print(f"Server UI: http://{local_ip}:5000")
+    print("Server çalışıyor! UI: port 5000")
     app.run(host='0.0.0.0', port=5000)

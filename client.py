@@ -9,8 +9,7 @@ from tkinter import simpledialog, messagebox
 TOKEN = "superdupersecrettoken"
 HTTP_PORT = 8080
 POSSIBLE_SERVERS = [
-    "192.168.1.9:5000",
-    "192.168.1.27:5000"
+    "remotecontrol-9hw8.onrender.com:5000"
 ]
 
 app = Flask(__name__)
@@ -225,14 +224,14 @@ def delete_task_by_url():
 # ---------------- server register ----------------
 def register_with_server(ip, port):
     try:
-        url = f"http://{ip}:{port}/register"
+        url = f"https://{ip}:{port}/register"  # cloud server HTTPS
         data = {"name": CLIENT_NAME}
-        resp = requests.post(url, json=data, timeout=3)
+        resp = requests.post(url, json=data, timeout=5, verify=False)  # SSL hatasını yoksay
         if resp.status_code == 200:
             print(f"[client] Registered with server {ip}:{port}")
             return True
-    except:
-        pass
+    except Exception as e:
+        print(f"[client] Register failed: {e}")
     return False
 
 def discover_server():
